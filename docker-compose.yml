@@ -1,0 +1,150 @@
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      SA_PASSWORD: "Dev@Pass123!"
+      ACCEPT_EULA: "Y"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "Dev@Pass123!" -Q "SELECT 1" -b -o /dev/null -C || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: redis-cli ping
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"   # HTTP REST API
+      - "6334:6334"   # gRPC API
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/6333"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Pull nomic-embed-text on first start; model is cached in the volume
+    entrypoint: ["/bin/bash", "-c", "ollama serve & sleep 5 && ollama pull nomic-embed-text && wait"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s   # model pull on first run can take time
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+
+  # ── Services ─────────────────────────────────────────────────────────────────
+
+  auth-api:
+    build:
+      context: ../Auth
+      dockerfile: Dockerfile
+    ports:
+      - "5001:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=AuthDb;User Id=sa;Password=Dev@Pass123!;TrustServerCertificate=true"
+      Jwt__Issuer: "http://auth-api:8080"
+      Jwt__Audience: "user-api"
+      Jwt__AccessTokenMinutes: "15"
+      Services__UserGrpc: "http://user-api:8080"
+      OpenTelemetry__ServiceName: "auth-service"
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    healthcheck:
+      test: wget -qO- http://localhost:8080/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  user-api:
+    build:
+      context: ../User
+      dockerfile: Dockerfile
+    ports:
+      - "5002:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=UserDb;User Id=sa;Password=Dev@Pass123!;TrustServerCertificate=true"
+      ConnectionStrings__Redis: "redis:6379"
+      Jwt__Authority: "http://auth-api:8080"
+      Jwt__Audience: "user-api"
+      OpenTelemetry__ServiceName: "user-service"
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-api:
+        condition: service_healthy
+
+  health-api:
+    build:
+      context: ../Health
+      dockerfile: Dockerfile
+    ports:
+      - "5003:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=HealthDb;User Id=sa;Password=Dev@Pass123!;TrustServerCertificate=true"
+      Jwt__Authority: "http://auth-api:8080"
+      Jwt__Audience: "user-api"
+      Encryption__ServerSecret: "Dik5xfD/VNuFua2PJL4R4gnKXhXqb02zylqL6nXCxpE="
+      Embeddings__OllamaUrl: "http://ollama:11434"
+      Embeddings__Model: "nomic-embed-text"
+      Embeddings__VectorSize: "768"
+      Qdrant__Host: "qdrant"
+      Qdrant__Port: "6334"
+      Qdrant__CollectionName: "health_entries"
+      OpenTelemetry__ServiceName: "health-service"
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      auth-api:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+
+volumes:
+  sqlserver_data:
+  qdrant_data:
+  ollama_data:
