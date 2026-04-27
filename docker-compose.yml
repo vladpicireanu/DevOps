@@ -57,6 +57,23 @@ services:
       retries: 10
       start_period: 120s   # model pull on first run can take time
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
   jaeger:
     image: jaegertracing/all-in-one:latest
     environment:
@@ -80,10 +97,15 @@ services:
       Jwt__Audience: "user-api"
       Jwt__AccessTokenMinutes: "15"
       Services__UserGrpc: "http://user-api:8080"
+      RabbitMQ__Host: "rabbitmq"
+      RabbitMQ__Username: "guest"
+      RabbitMQ__Password: "guest"
       OpenTelemetry__ServiceName: "auth-service"
       OpenTelemetry__Endpoint: "http://jaeger:4317"
     depends_on:
       sqlserver:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: wget -qO- http://localhost:8080/health || exit 1
@@ -104,12 +126,17 @@ services:
       ConnectionStrings__Redis: "redis:6379"
       Jwt__Authority: "http://auth-api:8080"
       Jwt__Audience: "user-api"
+      RabbitMQ__Host: "rabbitmq"
+      RabbitMQ__Username: "guest"
+      RabbitMQ__Password: "guest"
       OpenTelemetry__ServiceName: "user-service"
       OpenTelemetry__Endpoint: "http://jaeger:4317"
     depends_on:
       sqlserver:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
       auth-api:
         condition: service_healthy
@@ -132,10 +159,15 @@ services:
       Qdrant__Host: "qdrant"
       Qdrant__Port: "6334"
       Qdrant__CollectionName: "health_entries"
+      RabbitMQ__Host: "rabbitmq"
+      RabbitMQ__Username: "guest"
+      RabbitMQ__Password: "guest"
       OpenTelemetry__ServiceName: "health-service"
       OpenTelemetry__Endpoint: "http://jaeger:4317"
     depends_on:
       sqlserver:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
       auth-api:
         condition: service_healthy
@@ -144,7 +176,32 @@ services:
       ollama:
         condition: service_healthy
 
+  notification-api:
+    build:
+      context: ../Notification
+      dockerfile: Dockerfile
+    ports:
+      - "5004:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=NotificationDb;User Id=sa;Password=Dev@Pass123!;TrustServerCertificate=true"
+      Jwt__Authority: "http://auth-api:8080"
+      Jwt__Audience: "user-api"
+      RabbitMQ__Host: "rabbitmq"
+      RabbitMQ__Username: "guest"
+      RabbitMQ__Password: "guest"
+      OpenTelemetry__ServiceName: "notification-service"
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      auth-api:
+        condition: service_healthy
+
 volumes:
   sqlserver_data:
   qdrant_data:
   ollama_data:
+  rabbitmq_data:
