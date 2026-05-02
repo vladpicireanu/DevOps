@@ -94,7 +94,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=AuthDb;User Id=sa;Password=Dev@Pass123!;TrustServerCertificate=true"
       Jwt__Issuer: "http://auth-api:8080"
-      Jwt__Audience: "user-api"
+      Jwt__Audience: "health-app"
       Jwt__AccessTokenMinutes: "15"
       Services__UserGrpc: "http://user-api:8080"
       RabbitMQ__Host: "rabbitmq"
@@ -125,7 +125,7 @@ services:
       ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=UserDb;User Id=sa;Password=Dev@Pass123!;TrustServerCertificate=true"
       ConnectionStrings__Redis: "redis:6379"
       Jwt__Authority: "http://auth-api:8080"
-      Jwt__Audience: "user-api"
+      Jwt__Audience: "health-app"
       RabbitMQ__Host: "rabbitmq"
       RabbitMQ__Username: "guest"
       RabbitMQ__Password: "guest"
@@ -151,7 +151,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=HealthDb;User Id=sa;Password=Dev@Pass123!;TrustServerCertificate=true"
       Jwt__Authority: "http://auth-api:8080"
-      Jwt__Audience: "user-api"
+      Jwt__Audience: "health-app"
       Encryption__ServerSecret: "Dik5xfD/VNuFua2PJL4R4gnKXhXqb02zylqL6nXCxpE="
       Embeddings__OllamaUrl: "http://ollama:11434"
       Embeddings__Model: "nomic-embed-text"
@@ -189,7 +189,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=NotificationDb;User Id=sa;Password=Dev@Pass123!;TrustServerCertificate=true"
       Jwt__Authority: "http://auth-api:8080"
-      Jwt__Audience: "user-api"
+      Jwt__Audience: "health-app"
       RabbitMQ__Host: "rabbitmq"
       RabbitMQ__Username: "guest"
       RabbitMQ__Password: "guest"
