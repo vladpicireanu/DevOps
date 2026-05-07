@@ -126,6 +126,7 @@ services:
       ConnectionStrings__Redis: "redis:6379"
       Jwt__Authority: "http://auth-api:8080"
       Jwt__Audience: "health-app"
+      Services__SubscriptionGrpc: "http://subscription-api:8080"
       RabbitMQ__Host: "rabbitmq"
       RabbitMQ__Username: "guest"
       RabbitMQ__Password: "guest"
@@ -140,6 +141,12 @@ services:
         condition: service_healthy
       auth-api:
         condition: service_healthy
+    healthcheck:
+      test: wget -qO- http://localhost:8080/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   health-api:
     build:
@@ -150,6 +157,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=HealthDb;User Id=sa;Password=Dev@Pass123!;TrustServerCertificate=true"
+      ConnectionStrings__Redis: "redis:6379"
       Jwt__Authority: "http://auth-api:8080"
       Jwt__Audience: "health-app"
       Encryption__ServerSecret: "Dik5xfD/VNuFua2PJL4R4gnKXhXqb02zylqL6nXCxpE="
@@ -160,6 +168,7 @@ services:
       Qdrant__Port: "6334"
       Qdrant__CollectionName: "health_entries"
       Services__UserGrpc: "http://user-api:8080"
+      Services__SubscriptionGrpc: "http://subscription-api:8080"
       RabbitMQ__Host: "rabbitmq"
       RabbitMQ__Username: "guest"
       RabbitMQ__Password: "guest"
@@ -168,11 +177,15 @@ services:
     depends_on:
       sqlserver:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       auth-api:
         condition: service_healthy
       user-api:
+        condition: service_started
+      subscription-api:
         condition: service_started
       qdrant:
         condition: service_healthy
@@ -202,6 +215,67 @@ services:
         condition: service_healthy
       auth-api:
         condition: service_healthy
+
+  product-api:
+    build:
+      context: ../Product
+      dockerfile: Dockerfile
+    ports:
+      - "5005:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=ProductDb;User Id=sa;Password=Dev@Pass123!;TrustServerCertificate=true"
+      Jwt__Authority: "http://auth-api:8080"
+      Jwt__Audience: "health-app"
+      OpenTelemetry__ServiceName: "product-service"
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      auth-api:
+        condition: service_healthy
+    healthcheck:
+      test: wget -qO- http://localhost:8080/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  subscription-api:
+    build:
+      context: ../Subscription
+      dockerfile: Dockerfile
+    ports:
+      - "5006:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=SubscriptionDb;User Id=sa;Password=Dev@Pass123!;TrustServerCertificate=true"
+      Jwt__Authority: "http://auth-api:8080"
+      Jwt__Audience: "health-app"
+      Services__ProductGrpc: "http://product-api:8080"
+      Services__UserGrpc: "http://user-api:8080"
+      RabbitMQ__Host: "rabbitmq"
+      RabbitMQ__Username: "guest"
+      RabbitMQ__Password: "guest"
+      OpenTelemetry__ServiceName: "subscription-service"
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      auth-api:
+        condition: service_healthy
+      product-api:
+        condition: service_healthy
+      user-api:
+        condition: service_healthy
+    healthcheck:
+      test: wget -qO- http://localhost:8080/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 volumes:
   sqlserver_data:
